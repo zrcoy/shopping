@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shopping/data/categories.dart';
 import 'package:shopping/models/category.dart';
-import 'package:shopping/models/grocery_item.dart';
+
 import 'package:http/http.dart' as http;
+import 'package:shopping/models/grocery_item.dart';
 
 class NewItemScreen extends StatefulWidget {
   const NewItemScreen({super.key});
@@ -18,19 +21,43 @@ class _NewItemScreenState extends State<NewItemScreen> {
   var _name = '';
   var _quantity = 1;
   var _category = categories[Categories.vegetables]!;
+  var _isSending = false;
 
-  void _addItem() {
+  void _addItem() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
+      setState(() {
+        _isSending = true;
+      });
 
-      Navigator.of(context).pop(
-        GroceryItem(
-          id: DateTime.now().toString(),
-          name: _name,
-          quantity: _quantity,
-          category: _category,
+      final url = Uri.https('flutter-prep-ebd1c-default-rtdb.firebaseio.com',
+          'shopping-list.json');
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(
+          {
+            'name': _name,
+            'quantity': _quantity.toString(),
+            'category': _category.title,
+          },
         ),
       );
+      print(response.body);
+
+      if (!context.mounted) {
+        return;
+      }
+
+      final Map<String, dynamic> resData = json.decode(response.body);
+      // ignore: use_build_context_synchronously
+      Navigator.of(context).pop(GroceryItem(
+          id: resData['name'],
+          name: _name,
+          quantity: _quantity,
+          category: _category));
     }
   }
 
@@ -121,17 +148,26 @@ class _NewItemScreenState extends State<NewItemScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                      onPressed: () {
-                        _formKey.currentState!.reset();
-                        setState(() {
-                          _name = '';
-                          _quantity = 1;
-                          _category = categories[Categories.vegetables]!;
-                        });
-                      },
+                      onPressed: _isSending
+                          ? null
+                          : () {
+                              _formKey.currentState!.reset();
+                              setState(() {
+                                _name = '';
+                                _quantity = 1;
+                                _category = categories[Categories.vegetables]!;
+                              });
+                            },
                       child: const Text('Reset')),
                   ElevatedButton(
-                      onPressed: _addItem, child: const Text('Add Item')),
+                      onPressed: _addItem,
+                      child: _isSending
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(),
+                            )
+                          : const Text('Add Item')),
                 ],
               )
             ],
